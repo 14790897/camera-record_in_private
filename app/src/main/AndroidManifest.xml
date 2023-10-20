@@ -30,6 +30,11 @@
             </intent-filter>
         </activity>
 
+        <service
+            android:name=".MyVolumeService"
+            android:foregroundServiceType="mediaPlayback"
+            android:enabled="true"
+            android:exported="false" />
         <service android:name=".CameraService" />
 
         <receiver android:name="com.example.app1.VolumeReceiver" android:exported="true">

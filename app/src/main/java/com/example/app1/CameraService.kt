@@ -33,6 +33,7 @@ import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.Collections
 
 
 class CameraService : Service() {//我们这边继承了service不是activity
@@ -78,10 +79,25 @@ class CameraService : Service() {//我们这边继承了service不是activity
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
             Log.d("CameraService", "Camera permission granted.")
+
+
+            cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
+            val cameraId = cameraManager.cameraIdList.find { id ->
+                val characteristics = cameraManager.getCameraCharacteristics(id)
+                val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+                capabilities?.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE) == true
+            }
+            val characteristics = cameraManager.getCameraCharacteristics(cameraId!!)
+            val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
+            val largest = Collections.max(
+                listOf(*map.getOutputSizes(ImageFormat.JPEG)),
+                CompareSizesByArea()
+            )
+
             val imageDimension = Size(640, 480)
             imageReader = ImageReader.newInstance(
-                imageDimension.width,
-                imageDimension.height,
+                largest.width,
+                largest.height,
                 ImageFormat.JPEG,
                 5
             )
@@ -100,14 +116,6 @@ class CameraService : Service() {//我们这边继承了service不是activity
                 }
 
             }, null)
-
-            cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
-            val cameraId = cameraManager.cameraIdList.find { id ->
-                val characteristics = cameraManager.getCameraCharacteristics(id)
-                val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
-                capabilities?.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE) == true
-            }
-
 
             cameraManager.openCamera(cameraId.toString(), object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
@@ -228,3 +236,10 @@ class CameraService : Service() {//我们这边继承了service不是activity
         cameraDevice?.close()
     }
 }
+
+class CompareSizesByArea : Comparator<Size> {
+    override fun compare(o1: Size, o2: Size): Int {
+        return (o1.width * o1.height) - (o2.width * o2.height)
+    }
+}
+

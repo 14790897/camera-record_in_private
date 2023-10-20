@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -31,13 +32,20 @@ import com.example.app1.ui.theme.App1Theme
 class MainActivity : ComponentActivity() {
 
     private val REQUESTCODE = 1
-
-    companion object {
-        const val CAMERA_REQUEST_CODE = 1
-    }
+    //动态注册，取消注册
+    private var volumeReceiver: VolumeReceiver? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 启动 MyVolumeService 来监听音量键
+        val serviceIntent = Intent(this, MyVolumeService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+
 
         // 检查摄像头和存储权限
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
@@ -47,9 +55,20 @@ class MainActivity : ComponentActivity() {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE), REQUESTCODE)
         }
 
-        val filter = IntentFilter()
-        filter.addAction("android.intent.action.VOLUME_CHANGED")
-        registerReceiver(VolumeReceiver(), filter)
+        try {
+            volumeReceiver = VolumeReceiver()
+            val filter = IntentFilter()
+            filter.addAction("android.intent.action.VOLUME_CHANGED")
+            val receiver = registerReceiver(volumeReceiver, filter)
+            if (receiver != null) {
+                Toast.makeText(this, "VolumeReceiver 注册成功", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "VolumeReceiver 注册失败", Toast.LENGTH_SHORT).show()
+            Log.e("MainActivity", "VolumeReceiver 注册失败: ${e.message}")
+        }
+
+
 
         setContent {
             App1Theme {
@@ -103,6 +122,14 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (volumeReceiver != null) {
+            unregisterReceiver(volumeReceiver)
+        }
+    }
+
 }
 
 @Composable
