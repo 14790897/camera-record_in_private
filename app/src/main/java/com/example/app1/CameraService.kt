@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
@@ -23,6 +24,7 @@ import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
 import android.os.IBinder
+import android.provider.MediaStore
 import android.util.Log
 import android.util.Size
 import android.view.Surface
@@ -45,7 +47,7 @@ class CameraService : Service() {//我们这边继承了service不是activity
 
     override fun onCreate() {
         super.onCreate()
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 "cameraServiceChannel",
                 "Camera Service",
@@ -53,7 +55,7 @@ class CameraService : Service() {//我们这边继承了service不是activity
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
-//        }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -84,7 +86,6 @@ class CameraService : Service() {//我们这边继承了service不是activity
                 5
             )
             val readerSurface = imageReader!!.surface
-
             imageReader!!.setOnImageAvailableListener({ reader ->
                 val image = reader.acquireLatestImage()
                 // 在这里处理和保存图像
@@ -145,7 +146,11 @@ class CameraService : Service() {//我们这边继承了service不是activity
 
         val captureRequestBuilder =
             cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-        captureRequestBuilder?.addTarget(readerSurface)
+        captureRequestBuilder?.apply {
+            addTarget(readerSurface)
+            set(CaptureRequest.JPEG_ORIENTATION, 90) // 设置图像方向
+            set(CaptureRequest.JPEG_QUALITY, 100.toByte()) // 设置JPEG图像的质量为最好
+        }
 
         val outputConfigurations = listOf(OutputConfiguration(readerSurface))
         val sessionConfig = SessionConfiguration(SessionConfiguration.SESSION_REGULAR,
@@ -183,35 +188,40 @@ class CameraService : Service() {//我们这边继承了service不是activity
     }
 
     private fun saveImageToExternalStorage(imageBytes: ByteArray) {
-        val folder = File(Environment.getExternalStorageDirectory().toString() + "/MyFolder_app1")
-        if (!folder.exists()) {
-            val success = folder.mkdirs()
-            if (!success) {
-                Log.e("CameraService", "Failed to create directory.")
-                return
-            }
-            else{
-                Log.d("CameraService", "Directory created.")
+        val resolver = contentResolver
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "MyImage.jpg")
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + File.separator + "CameraServiceFolder")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
         }
 
-        val file = File(folder, "MyImage.jpg")
+        val imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
 
         try {
-            val fos = FileOutputStream(file)
-            fos.write(imageBytes)
-            fos.close()
-
-            // 刷新媒体库
-            MediaScannerConnection.scanFile(this, arrayOf(file.path), null) { _, uri ->
-                // 图片已保存并且媒体库已更新
-                Log.d("CameraService", "Image saved: $uri")
+            imageUri?.let { uri ->
+                val os = resolver.openOutputStream(uri)
+                os?.apply {
+                    write(imageBytes)
+                    close()
+                }
             }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                contentValues.clear()
+                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                imageUri?.let { resolver.update(it, contentValues, null, null) }
+            }
+            Log.d("CameraService", "Image saved: $imageUri")
 
         } catch (e: IOException) {
             e.printStackTrace()
+            Log.e("CameraService", "Failed to save image.")
         }
     }
+
 
     override fun onDestroy() {
         super.onDestroy()
