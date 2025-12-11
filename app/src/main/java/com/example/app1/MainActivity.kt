@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -38,13 +39,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 设置MainActivity用于显示的布局
+        setContentView(R.layout.activity_main)
+
         // 启动 MyVolumeService 来监听音量键
-        val serviceIntent = Intent(this, MyVolumeService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
+//        val serviceIntent = Intent(this, MyVolumeService::class.java)
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+//            startForegroundService(serviceIntent)
+//        } else {
+//            startService(serviceIntent)
+//        }
 
 
         // 检查摄像头和存储权限
@@ -128,6 +132,26 @@ class MainActivity : ComponentActivity() {
         if (volumeReceiver != null) {
             unregisterReceiver(volumeReceiver)
         }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP -> {
+                    Log.d("MainActivity", "Volume UP pressed")
+                    val serviceIntent = Intent(this@MainActivity, CameraService::class.java)
+                    startService(serviceIntent)
+                    return true
+                }
+                KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                    Log.d("MainActivity", "Volume DOWN pressed")
+                    val serviceIntent = Intent(this@MainActivity, CameraService::class.java)
+                    startService(serviceIntent)
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
 }
